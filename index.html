@@ -3,39 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App Icon Downloader & Copier</title>
+    <title>iOS Icon Toolkit</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col items-center py-10 px-4">
+<body class="bg-slate-100 min-h-screen flex flex-col items-center py-10 px-4 font-sans">
 
     <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">iOS Icon Toolkit</h1>
         
         <div class="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
-            <label class="block text-sm font-semibold text-gray-600 mb-2">Copy/Download Size (px)</label>
+            <label class="block text-sm font-semibold text-gray-600 mb-2">Copy Size (px)</label>
             <div class="flex items-center gap-2">
-                <input type="number" id="sizeSetting" placeholder="512" 
+                <input type="number" id="sizeSetting" 
                     class="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500">
                 <span class="text-gray-400 text-sm">px</span>
             </div>
-            <p class="text-[10px] text-gray-400 mt-2 italic">Size saved automatically to LocalStorage</p>
         </div>
 
         <div class="flex gap-2 mb-6">
-            <input type="text" id="appInput" placeholder="App Name..." 
+            <input type="text" id="appInput" placeholder="App Name (e.g. Airbnb)" 
                 class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <button onclick="fetchIcon()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">Search</button>
+            <button id="searchBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">Search</button>
         </div>
 
-        <div id="resultArea" class="hidden flex flex-col items-center border-t pt-6">
-            <img id="iconPreview" src="" class="w-40 h-40 rounded-[22%] shadow-md mb-4 bg-gray-100">
+        <div id="resultArea" class="hidden flex flex-col items-center border-t pt-6 text-center">
+            <div class="relative group">
+                <img id="iconPreview" src="" class="w-40 h-40 rounded-[22%] shadow-md mb-4 bg-gray-100 object-cover">
+            </div>
             <h2 id="appName" class="text-lg font-bold text-gray-700 mb-4"></h2>
             
             <div class="grid grid-cols-2 gap-3 w-full">
-                <button onclick="copyToClipboard()" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-medium transition">
+                <button id="copyBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-medium transition">
                     Copy Image
                 </button>
-                <a id="downloadBtn" href="#" download="icon.png" 
+                <a id="downloadBtn" href="#" download="icon.jpg" 
                    class="bg-green-600 hover:bg-green-700 text-white text-center py-2 rounded-lg font-medium transition">
                     Download
                 </a>
@@ -49,80 +50,90 @@
 
     <script>
         const sizeInput = document.getElementById('sizeSetting');
+        const appInput = document.getElementById('appInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        let currentImgBlob = null;
 
-        // 1. Load from LocalStorage on Startup
+        // Load Settings
         window.onload = () => {
-            const savedSize = localStorage.getItem('iconSize');
-            sizeInput.value = savedSize || 512;
+            sizeInput.value = localStorage.getItem('iconSize') || 512;
         };
 
-        // 2. Save to LocalStorage on Change
         sizeInput.addEventListener('input', () => {
             localStorage.setItem('iconSize', sizeInput.value);
         });
 
+        // Search Logic
         async function fetchIcon() {
-            const input = document.getElementById('appInput').value;
-            const resultArea = document.getElementById('resultArea');
-            const statusMsg = document.getElementById('statusMsg');
-            
-            if (!input) return;
-            resultArea.classList.add('hidden');
-            statusMsg.innerText = "Searching...";
+            const query = appInput.value.trim();
+            if (!query) return;
+
+            document.getElementById('resultArea').classList.add('hidden');
+            statusMsg.innerText = "Connecting to App Store...";
             statusMsg.classList.remove('hidden');
 
             try {
-                const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(input)}&entity=software&limit=1`);
+                const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=software&limit=1`);
                 const data = await response.json();
 
                 if (data.results.length > 0) {
                     const app = data.results[0];
-                    // Always pull the high-res 1024 original as our source for resizing
-                    const sourceUrl = app.artworkUrl512.replace('512x512bb', '1024x1024bb');
+                    const rawUrl = app.artworkUrl512.replace('512x512bb', '1024x1024bb');
                     
-                    document.getElementById('iconPreview').src = sourceUrl;
+                    // Fetch image as blob to bypass canvas tainting
+                    const imgResponse = await fetch(rawUrl);
+                    currentImgBlob = await imgResponse.blob();
+                    const objectURL = URL.createObjectURL(currentImgBlob);
+
+                    document.getElementById('iconPreview').src = objectURL;
                     document.getElementById('appName').innerText = app.trackName;
-                    document.getElementById('downloadBtn').href = sourceUrl;
+                    document.getElementById('downloadBtn').href = objectURL;
+                    document.getElementById('downloadBtn').download = `${app.trackName}-icon.jpg`;
 
                     statusMsg.classList.add('hidden');
-                    resultArea.classList.remove('hidden');
+                    document.getElementById('resultArea').classList.remove('hidden');
                 } else {
-                    statusMsg.innerText = "No app found.";
+                    statusMsg.innerText = "No results found.";
                 }
-            } catch (e) { statusMsg.innerText = "Error fetching data."; }
+            } catch (e) {
+                statusMsg.innerText = "Search failed. This can happen if the App Store is rate-limiting requests.";
+            }
         }
 
-        // 3. Copy Resized Image to Clipboard
-        async function copyToClipboard() {
-            const img = document.getElementById('iconPreview');
+        // Enter Key Support
+        appInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') fetchIcon(); });
+        searchBtn.addEventListener('click', fetchIcon);
+
+        // Copy Image Logic
+        copyBtn.addEventListener('click', async () => {
             const canvas = document.getElementById('resizeCanvas');
             const ctx = canvas.getContext('2d');
             const size = parseInt(sizeInput.value) || 512;
+            const img = new Image();
 
-            // Set canvas to custom size
-            canvas.width = size;
-            canvas.height = size;
-
-            // We must draw the image to the canvas to resize it
-            // 'crossOrigin' is needed to prevent "tainted canvas" errors
-            const tempImg = new Image();
-            tempImg.crossOrigin = "anonymous"; 
-            tempImg.src = img.src;
-
-            tempImg.onload = async () => {
-                ctx.drawImage(tempImg, 0, 0, size, size);
+            copyBtn.innerText = "Copying...";
+            
+            img.onload = async () => {
+                canvas.width = size;
+                canvas.height = size;
+                ctx.drawImage(img, 0, 0, size, size);
                 
                 canvas.toBlob(async (blob) => {
                     try {
-                        const item = new ClipboardItem({ "image/png": blob });
-                        await navigator.clipboard.write([item]);
-                        alert(`Success! ${size}x${size} image copied to clipboard.`);
+                        const data = [new ClipboardItem({ "image/png": blob })];
+                        await navigator.clipboard.write(data);
+                        copyBtn.innerText = "Copied!";
+                        setTimeout(() => copyBtn.innerText = "Copy Image", 2000);
                     } catch (err) {
-                        alert("Failed to copy. Some browsers block clipboard access over non-HTTPS connections.");
+                        alert("Clipboard error. GitHub Pages must be accessed via HTTPS for this to work.");
+                        copyBtn.innerText = "Copy Image";
                     }
                 }, 'image/png');
             };
-        }
+            img.src = document.getElementById('iconPreview').src;
+        });
     </script>
 </body>
 </html>
