@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Icon Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center py-12 px-4">
+
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">iOS Icon Fetcher</h1>
+        
+        <div class="flex gap-2 mb-8">
+            <input type="text" id="appInput" placeholder="Enter App Name (e.g. Slack)" 
+                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button onclick="fetchIcon()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">
+                Search
+            </button>
+        </div>
+
+        <div id="resultArea" class="hidden flex flex-col items-center border-t pt-6">
+            <img id="iconPreview" src="" alt="App Icon" class="w-48 h-48 rounded-[22%] shadow-lg mb-4 bg-gray-100">
+            <h2 id="appName" class="text-xl font-semibold text-gray-700 mb-4 text-center"></h2>
+            
+            <div class="flex flex-col w-full gap-2">
+                <a id="downloadBtn" href="#" download="icon.png" 
+                   class="w-full bg-green-600 hover:bg-green-700 text-white text-center py-3 rounded-xl font-medium transition">
+                    Download 1024x1024 (PNG)
+                </a>
+                <p class="text-xs text-gray-400 text-center">Note: Apple icons are typically returned as JPEGs via API.</p>
+            </div>
+        </div>
+
+        <p id="statusMsg" class="text-center text-gray-500 hidden mt-4"></p>
+    </div>
+
+    <script>
+        async function fetchIcon() {
+            const input = document.getElementById('appInput').value;
+            const resultArea = document.getElementById('resultArea');
+            const statusMsg = document.getElementById('statusMsg');
+            
+            if (!input) return;
+
+            // Reset UI
+            resultArea.classList.add('hidden');
+            statusMsg.innerText = "Searching App Store...";
+            statusMsg.classList.remove('hidden');
+
+            try {
+                // Using a CORS proxy if running locally, otherwise direct fetch might work 
+                // depending on your browser's security settings for the iTunes API.
+                const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(input)}&entity=software&limit=1`);
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    const app = data.results[0];
+                    
+                    // Logic to get the absolute highest resolution
+                    const highResUrl = app.artworkUrl512.replace('512x512bb', '1024x1024bb');
+
+                    document.getElementById('iconPreview').src = highResUrl;
+                    document.getElementById('appName').innerText = app.trackName;
+                    
+                    // Setup Download Button
+                    const dlBtn = document.getElementById('downloadBtn');
+                    dlBtn.href = highResUrl;
+                    dlBtn.download = `${app.trackName.replace(/\s+/g, '-').toLowerCase()}-icon.jpg`;
+
+                    statusMsg.classList.add('hidden');
+                    resultArea.classList.remove('hidden');
+                } else {
+                    statusMsg.innerText = "No app found. Try another name.";
+                }
+            } catch (error) {
+                console.error(error);
+                statusMsg.innerText = "Error fetching data. Check your connection.";
+            }
+        }
+
+        // Allow 'Enter' key to search
+        document.getElementById('appInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchIcon();
+        });
+    </script>
+</body>
+</html>
